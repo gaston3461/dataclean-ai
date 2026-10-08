@@ -1,0 +1,9 @@
+venta_id;fecha;categoria;unidades;importe;ciudad
+1;2026-01-01;Libros;2;15000;Córdoba
+2;2026-01-02; libros ;1;7500;Rosario
+3;2026-01-03;Tecnología;3;95000;Mendoza
+4;2026-02-01;LIBROS;2;;Córdoba
+5;fecha inválida;Hogar;1;12000;Rosario
+5;fecha inválida;Hogar;1;12000;Rosario
+6;2026-02-05;Hogar;100;1000000;Mendoza
+7;2026-03-01;Tecnología;2;65000;Córdoba
