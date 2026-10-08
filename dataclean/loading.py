@@ -74,3 +74,25 @@ def load(raw, name, sheet=0, encoding=None, sep=None, decimal='.', thousands=Non
         raise
     except Exception as exc:
         raise ValueError('No se pudo leer el archivo. Revisá formato, hoja, separador y codificación.') from exc
+
+
+def load_workbook(raw, name, decimal='.', thousands=None):
+    """Carga atómica de todas las hojas, incluidas hojas sin registros."""
+    sheet_names = sheets(raw, name)  # valida tamaño y expansión antes de abrir
+    if len(sheet_names) > 40:
+        raise ValueError('El libro supera el máximo de 40 hojas.')
+    engine = 'xlrd' if Path(name).suffix.lower() == '.xls' else 'openpyxl'
+    result, total = {}, 0
+    try:
+        with pd.ExcelFile(BytesIO(raw), engine=engine) as book:
+            for sheet in sheet_names:
+                df = book.parse(sheet, decimal=decimal, thousands=thousands)
+                total += df.size
+                if total > MAX_CELLS:
+                    raise ValueError('El libro supera dos millones de celdas entre todas las hojas.')
+                result[sheet] = df
+        return result
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError('No se pudieron leer todas las hojas del libro.') from exc

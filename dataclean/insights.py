@@ -1,9 +1,11 @@
 from .profiling import semantic
+from .roles import roles
 
 
 def insights(df):
     findings, recommendations, hypotheses = [], [], []
-    nums = list(df.select_dtypes(include='number').columns)
+    inferred = roles(df)
+    nums = [c for c,role in inferred.items() if role=='Numérica']
     for c in nums:
         s = df[c].dropna()
         if len(s): findings.append(f'{c}: media {s.mean():,.2f}; mínimo {s.min():,.2f}; máximo {s.max():,.2f}.')

@@ -10,8 +10,13 @@ def make_chart(df, kind, x=None, y=None, aggregation='Sin agregar', dark=False):
         else:
             if y is None: raise ValueError('Seleccioná una columna numérica.')
             data = data.groupby(x, dropna=False)[y].agg({'Suma':'sum', 'Media':'mean', 'Mediana':'median'}[aggregation]).reset_index()
+    if kind in ('Líneas','Temporal'):
+        import pandas as pd
+        if not (pd.api.types.is_numeric_dtype(data[x]) or pd.api.types.is_datetime64_any_dtype(data[x])):
+            raise ValueError('Las líneas requieren un eje temporal o numérico con orden válido.')
     if kind == 'Correlación':
-        nums = data.select_dtypes(include='number')
+        from .roles import roles
+        nums = data[[c for c,r in roles(data).items() if r=='Numérica']]
         if len(nums.columns)<2: raise ValueError('La correlación requiere dos columnas numéricas.')
         fig = px.imshow(nums.corr(), text_auto='.2f', color_continuous_scale='RdBu', zmin=-1, zmax=1)
     elif kind == 'Histograma': fig = px.histogram(data, x=x)

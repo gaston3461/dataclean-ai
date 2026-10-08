@@ -1,3 +1,4 @@
+# DataClean AI V2 — Python 3.11/3.12; procesamiento local, sin APIs ni servicios pagos.
 streamlit==1.55.0
 pandas==2.3.3
 numpy==2.4.3
