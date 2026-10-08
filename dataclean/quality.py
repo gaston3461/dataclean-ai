@@ -11,8 +11,11 @@ def outlier_mask(s, method='IQR'):
     return ((s < q1-1.5*span) | (s > q3+1.5*span)).fillna(False)
 
 
-def assess(df, keys=(), ranges=None, method='IQR'):
+def assess(df, keys=(), ranges=None, method='Automático', iqr_factor=1.5, z_threshold=3.0):
     nulls = missing(df)
+    if not df.size:
+        return {'score':0.0,'components':{'Completitud':0.0,'Unicidad':0.0,'Consistencia':0.0},
+                'issues':pd.DataFrame([{'Columna':'Todas','Problema':'Dataset sin celdas evaluables','Registros':len(df)}])}
     issues = []
     inconsistent = pd.DataFrame(False, index=df.index, columns=df.columns)
     def add(c, label, mask, consistency=False):
@@ -26,7 +29,9 @@ def assess(df, keys=(), ranges=None, method='IQR'):
         if nulls[c].mean() > .5: issues.append({'Columna': c, 'Problema': 'Más del 50% faltante', 'Registros': int(nulls[c].sum())})
         if s.nunique(dropna=True) <= 1: issues.append({'Columna': c, 'Problema': 'Columna constante', 'Registros': len(s)})
         if pd.api.types.is_numeric_dtype(s):
-            add(c, 'Atípicos ('+method+')', outlier_mask(s, method))
+            from .outliers import analyze_outliers
+            detail = analyze_outliers(s, method, iqr_factor, z_threshold)
+            add(c, 'Atípicos ('+detail['method']+')', detail['mask'])
             if ranges and c in ranges:
                 low, high = ranges[c]; add(c, 'Fuera de rango indicado', ((s<low)|(s>high)).fillna(False), True)
         else:

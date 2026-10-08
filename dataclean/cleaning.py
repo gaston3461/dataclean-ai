@@ -9,10 +9,10 @@ OPERATIONS = ['Eliminar duplicados', 'Eliminar columnas vacías', 'Eliminar fila
               'Minúsculas', 'Mayúsculas', 'Estandarizar nombres', 'Convertir a número', 'Convertir a texto',
               'Convertir fechas', 'Reemplazar/unificar categorías', 'Eliminar filas con faltantes',
               'Imputar media', 'Imputar mediana', 'Imputar moda', 'Imputar valor',
-              'Eliminar atípicos', 'Limitar atípicos IQR']
+              'Eliminar atípicos', 'Limitar atípicos IQR', 'Limitar atípicos (método elegido)']
 
 
-def transform(df, operation, columns=(), value='', old='', dayfirst=True, method='IQR'):
+def transform(df, operation, columns=(), value='', old='', dayfirst=True, method='IQR', iqr_factor=1.5, z_threshold=3.0):
     out = df.copy(deep=True)
     cols = list(columns)
     if operation not in OPERATIONS: raise ValueError('Operación desconocida.')
@@ -31,7 +31,10 @@ def transform(df, operation, columns=(), value='', old='', dayfirst=True, method
         out.columns = names
     elif operation == 'Eliminar filas con faltantes': out = out.loc[~missing(out)[cols].any(axis=1)]
     elif operation == 'Eliminar atípicos':
-        masks = [outlier_mask(out[c], method) for c in cols if pd.api.types.is_numeric_dtype(out[c])]
+        from .outliers import analyze_outliers
+        details = [analyze_outliers(out[c], method, iqr_factor, z_threshold, min_samples=3 if method!='Automático' else 8) for c in cols]
+        if any(d['method']=='Omitido' for d in details): raise ValueError('Columna excluida o muestra insuficiente: revisá el diagnóstico de atípicos.')
+        masks = [d['mask'] for d in details]
         if len(masks) != len(cols): raise ValueError('Los atípicos requieren columnas numéricas.')
         out = out.loc[~pd.concat(masks, axis=1).any(axis=1)]
     else:
@@ -59,10 +62,12 @@ def transform(df, operation, columns=(), value='', old='', dayfirst=True, method
                     if pd.api.types.is_numeric_dtype(s): fill = float(value); clean = clean.astype(float)
                     elif pd.api.types.is_datetime64_any_dtype(s): fill = pd.to_datetime(value)
                 out[c] = clean.fillna(fill)
-            elif operation == 'Limitar atípicos IQR':
+            elif operation in ('Limitar atípicos IQR', 'Limitar atípicos (método elegido)'):
                 if not pd.api.types.is_numeric_dtype(s): raise ValueError('Seleccioná columnas numéricas.')
-                q1, q3 = s.quantile([.25, .75]); span = q3-q1
-                out[c] = s.clip(q1-1.5*span, q3+1.5*span)
+                from .outliers import analyze_outliers
+                detail = analyze_outliers(s, 'IQR' if operation=='Limitar atípicos IQR' else method, iqr_factor, z_threshold, min_samples=3 if method!='Automático' else 8)
+                if detail['method']=='Omitido': raise ValueError(detail['reason'])
+                out[c] = s.clip(detail['lower'], detail['upper'])
     return out
 
 
@@ -84,15 +89,18 @@ class History:
         self.current = df.copy(deep=True)
         self.records = []
         self._undo = []
+        self.revision = 0
     @property
     def original(self): return self._original.copy(deep=True)
-    def apply(self, result, operation, columns):
+    def apply(self, result, operation, columns, metadata=None):
+        self.revision += 1
         self._undo.append(self.current.copy(deep=True))
         self.records.append({'fecha_UTC': datetime.now(timezone.utc).isoformat(), 'operación': operation,
                              'columnas': list(columns), 'registros_afectados': affected(self.current, result),
-                             'filas_antes': len(self.current), 'filas_después': len(result)})
+                             'filas_antes': len(self.current), 'filas_después': len(result), 'parámetros':metadata or {}})
         self.current = result.copy(deep=True)
     def undo(self):
-        if self._undo: self.current = self._undo.pop(); self.records.pop()
+        if self._undo:
+            self.current = self._undo.pop(); self.records.pop(); self.revision += 1
     def reset(self):
-        self.current = self.original; self.records.clear(); self._undo.clear()
+        self.current = self.original; self.records.clear(); self._undo.clear(); self.revision += 1
